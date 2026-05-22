@@ -470,21 +470,6 @@ export default function Purchases() {
       return next;
     });
   }, []);
-  // 入庫済みを表示するか（デフォルトは非表示）
-  const [showPurchased, setShowPurchased] = useState<boolean>(() => {
-    return typeof window !== 'undefined' ? (localStorage.getItem('purchases-showPurchased') === 'true') : false;
-  });
-  const handleToggleShowPurchased = useCallback(() => {
-    setShowPurchased(prev => {
-      const next = !prev;
-      if (next) {
-        localStorage.setItem('purchases-showPurchased', 'true');
-      } else {
-        localStorage.removeItem('purchases-showPurchased');
-      }
-      return next;
-    });
-  }, []);
   const [searchQuery, setSearchQuery] = useState("");
   const [showTotals, setShowTotals] = useState(true);
   // 入庫確認ダイアログ
@@ -525,6 +510,10 @@ export default function Purchases() {
   const selectedOperatorName = operators?.find((o) => o.key === selectedOperatorKey)?.name ?? "野田";
 
   const today = new Date().toISOString().split("T")[0];
+
+  const activePurchases = useMemo(() => {
+    return ((purchases ?? []) as Purchase[]).filter((p) => p.status !== "purchased");
+  }, [purchases]);
 
   // 発注済み登録: 在庫検索フィルター
   const filteredInventoriesForOrder = useMemo(() => {
@@ -591,9 +580,8 @@ export default function Purchases() {
 
   // カテゴリ別合計金額
   const categoryTotals = useMemo(() => {
-    if (!purchases) return new Map<string, number>();
     const totals = new Map<string, number>();
-    for (const p of purchases as Purchase[]) {
+    for (const p of activePurchases) {
       for (const item of p.purchase_items) {
         const price = Number(item.unit_price) || 0;
         const qty = Number(item.quantity) || 0;
@@ -603,7 +591,7 @@ export default function Purchases() {
       }
     }
     return totals;
-  }, [purchases]);
+  }, [activePurchases]);
 
   const grandTotal = useMemo(() => {
     let total = 0;
@@ -616,28 +604,23 @@ export default function Purchases() {
     for (const cat of managedCategories ?? []) {
       if (cat && cat !== "すべて" && cat !== "未分類") cats.add(cat);
     }
-    for (const p of (purchases ?? []) as Purchase[]) {
+    for (const p of activePurchases) {
       for (const item of p.purchase_items) {
         const cat = (item.category || "").trim();
         if (cat && cat !== "未分類") cats.add(cat);
       }
     }
     return Array.from(cats).sort((a, b) => a.localeCompare(b, "ja"));
-  }, [managedCategories, purchases]);
+  }, [activePurchases, managedCategories]);
 
   const categories = useMemo(() => ["すべて", "未分類", ...categoryOptions], [categoryOptions]);
 
   const filteredPurchases = useMemo(() => {
-    if (!purchases) return [];
-    let result = purchases as Purchase[];
+    let result = activePurchases;
     if (selectedCategory !== "すべて") {
       result = result.filter((p) =>
         p.purchase_items.some((item) => (item.category || "未分類") === selectedCategory)
       );
-    }
-    // 入庫済み非表示（showPurchased=falseの時はpurchasedを除外）
-    if (!showPurchased) {
-      result = result.filter((p) => p.status !== "purchased");
     }
     // ステータスフィルター
     if (selectedStatusFilter) {
@@ -666,7 +649,7 @@ export default function Purchases() {
       });
     }
     return result;
-  }, [purchases, selectedCategory, searchQuery, selectedStatusFilter, showPurchased]);
+  }, [activePurchases, selectedCategory, searchQuery, selectedStatusFilter]);
 
   // 入庫管理ページネーション
   const {
@@ -1130,10 +1113,10 @@ export default function Purchases() {
             <SelectContent>
               {categories.map((cat) => {
                 const count = cat === "すべて"
-                  ? (purchases as Purchase[] | undefined)?.length ?? 0
-                  : (purchases as Purchase[] | undefined)?.filter((p) =>
+                  ? activePurchases.length
+                  : activePurchases.filter((p) =>
                       p.purchase_items.some((item) => (item.category || "未分類") === cat)
-                    ).length ?? 0;
+                    ).length;
                 return (
                   <SelectItem key={cat} value={cat}>
                     {cat} ({count})
@@ -1178,17 +1161,6 @@ export default function Purchases() {
               {selectedStatusFilter === 'shipped' && (
                 <span className="ml-1 opacity-70">×</span>
               )}
-            </button>
-            {/* 入庫済み表示トグル */}
-            <button
-              onClick={handleToggleShowPurchased}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                showPurchased
-                  ? 'bg-green-600 text-white border-green-600'
-                  : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100 dark:bg-gray-900/20 dark:text-gray-400 dark:border-gray-700'
-              }`}
-            >
-              {showPurchased ? '入庫済みを表示中' : '入庫済みを表示'}
             </button>
           </div>
         </div>
