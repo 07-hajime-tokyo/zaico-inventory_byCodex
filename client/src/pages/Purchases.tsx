@@ -95,8 +95,8 @@ interface EditState {
   note: string;
   supplierName: string;
   supplierUrl: string;
-  // 商品別編集: inventory_id -> { unitPrice, managementNo, estimatedDate }
-  itemEdits: Record<number, { unitPrice: string; managementNo: string; estimatedDate: string }>;
+  // 商品別編集: inventory_id -> { unitPrice, managementNo, estimatedDate, category }
+  itemEdits: Record<number, { unitPrice: string; managementNo: string; estimatedDate: string; category: string }>;
 }
 
 const CARRIER_OPTIONS = [
@@ -441,6 +441,7 @@ export default function Purchases() {
   const createOrderedPurchaseMutation = trpc.zaico.createOrderedPurchase.useMutation();
   const { data: operators } = trpc.zaico.getOperators.useQuery();
   const { data: currentUser } = trpc.auth.me.useQuery();
+  const { data: managedCategories } = trpc.zaico.getCategories.useQuery();
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editState, setEditState] = useState<EditState>({ shipDate: "", trackingNumber: "", carrier: "auto", note: "", supplierName: "", supplierUrl: "", itemEdits: {} });
@@ -610,16 +611,21 @@ export default function Purchases() {
     return total;
   }, [categoryTotals]);
 
-  const categories = useMemo(() => {
-    if (!purchases) return ["すべて"];
+  const categoryOptions = useMemo(() => {
     const cats = new Set<string>();
-    for (const p of purchases as Purchase[]) {
+    for (const cat of managedCategories ?? []) {
+      if (cat && cat !== "すべて" && cat !== "未分類") cats.add(cat);
+    }
+    for (const p of (purchases ?? []) as Purchase[]) {
       for (const item of p.purchase_items) {
-        cats.add(item.category || "未分類");
+        const cat = (item.category || "").trim();
+        if (cat && cat !== "未分類") cats.add(cat);
       }
     }
-    return ["すべて", ...Array.from(cats).sort()];
-  }, [purchases]);
+    return Array.from(cats).sort((a, b) => a.localeCompare(b, "ja"));
+  }, [managedCategories, purchases]);
+
+  const categories = useMemo(() => ["すべて", "未分類", ...categoryOptions], [categoryOptions]);
 
   const filteredPurchases = useMemo(() => {
     if (!purchases) return [];
@@ -675,13 +681,14 @@ export default function Purchases() {
 
   function startEdit(purchase: Purchase) {
     setEditingId(purchase.id);
-    const itemEdits: Record<number, { unitPrice: string; managementNo: string; estimatedDate: string }> = {};
+    const itemEdits: Record<number, { unitPrice: string; managementNo: string; estimatedDate: string; category: string }> = {};
     for (const item of purchase.purchase_items) {
       const { managementNo } = parseEtc(item.etc);
       itemEdits[item.inventory_id] = {
         unitPrice: item.unit_price ? String(item.unit_price) : "",
         managementNo,
         estimatedDate: item.estimated_purchase_date ?? "",
+        category: item.category ?? "",
       };
     }
     // 発送日が未設定の場合は当日日付を自動セット
@@ -724,12 +731,15 @@ export default function Purchases() {
           const newEtc = newManagementNo
             ? [newManagementNo, parts[1] ?? "", parts[2] ?? ""].join(", ")
             : item.etc ?? "";
+          const nextCategory = edit.category.trim();
+          const currentCategory = item.category || "";
           return {
             ...(item.id > 0 && { id: item.id }),
             inventoryId: item.inventory_id,
             ...(edit.unitPrice !== "" && { unitPrice: parseFloat(edit.unitPrice) }),
             ...(edit.estimatedDate !== "" && { estimatedPurchaseDate: edit.estimatedDate }),
             ...(newManagementNo !== parseEtc(item.etc).managementNo && { etc: newEtc }),
+            ...(nextCategory !== currentCategory && { category: nextCategory || null }),
           };
         }).filter((x): x is NonNullable<typeof x> => x !== null);
         if (purchaseItems.length > 0) {
@@ -768,6 +778,11 @@ export default function Purchases() {
       }
       toast.success("保存しました");
       setEditingId(null);
+      await Promise.all([
+        utils.zaico.getCategories.invalidate(),
+        utils.zaico.getInventories.invalidate(),
+        utils.zaico.getPurchasesWithCategory.invalidate(),
+      ]);
       refetch();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "保存に失敗しました";
@@ -1337,9 +1352,32 @@ export default function Purchases() {
                               )}
                             </td>
                             <td data-label="カテゴリ" className="px-4 py-2">
-                              <Badge variant="outline" className="text-xs">
-                                {item.category || "未分類"}
-                              </Badge>
+                              {isEditing && itemEdit ? (
+                                <Select
+                                  value={itemEdit.category || "__none__"}
+                                  onValueChange={(v) => setEditState((s) => ({
+                                    ...s,
+                                    itemEdits: {
+                                      ...s.itemEdits,
+                                      [item.inventory_id]: { ...itemEdit, category: v === "__none__" ? "" : v }
+                                    }
+                                  }))}
+                                >
+                                  <SelectTrigger className="h-7 min-w-[140px] text-xs">
+                                    <SelectValue placeholder="カテゴリ" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__none__">未分類</SelectItem>
+                                    {categoryOptions.map((cat) => (
+                                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <Badge variant="outline" className="text-xs">
+                                  {item.category || "未分類"}
+                                </Badge>
+                              )}
                             </td>
                             <td data-label="仕入単価" className="px-4 py-2 text-right">
                               {isEditing && itemEdit ? (

@@ -190,6 +190,8 @@ export default function Deliveries() {
   const updateInventoryMutation = trpc.zaico.updateInventory.useMutation();
   const createInventoryMutation = trpc.zaico.createInventory.useMutation();
   const createOrderedPurchaseMutation = trpc.zaico.createOrderedPurchase.useMutation();
+  const addCategoryMutation = trpc.zaico.addCategory.useMutation();
+  const deleteCategoryMutation = trpc.zaico.deleteCategory.useMutation();
   const { data: operators } = trpc.zaico.getOperators.useQuery();
   const { data: nextPurchaseNumData, refetch: refetchNextNum } = trpc.zaico.getNextPurchaseNum.useQuery(undefined, { enabled: false });
   const { data: currentUser } = trpc.auth.me.useQuery();
@@ -197,6 +199,7 @@ export default function Deliveries() {
   const { data: incompleteInvoices } = trpc.orderManagement.getIncompleteInvoices.useQuery();
   const { data: todayTrackingNumbers } = trpc.fedex.getTodayTrackingNumbers.useQuery();
   const { data: csvRows } = trpc.orderManagement.getCsvData.useQuery();
+  const { data: managedCategories } = trpc.zaico.getCategories.useQuery();
 
   /** 管理番号の2番目の部分（_区切り）から取引先を判別する */
   function detectCustomerFromManagementNo(etc: string | undefined): { code: string; displayName: string } | null {
@@ -348,6 +351,9 @@ export default function Deliveries() {
   const [selectedCategory, setSelectedCategory] = useState<string>(() => {
     return typeof window !== 'undefined' ? (localStorage.getItem('deliveries-selectedCategory') ?? 'すべて') : 'すべて';
   });
+  const [showCategoryDialog, setShowCategoryDialog] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [categoryDeleteTarget, setCategoryDeleteTarget] = useState<string | null>(null);
 
   const handleSetSelectedCategory = useCallback((cat: string) => {
     setSelectedCategory(cat);
@@ -488,6 +494,47 @@ export default function Deliveries() {
     refetch();
   }
 
+  async function handleAddCategory() {
+    const name = newCategoryName.trim();
+    if (!name) {
+      toast.error("カテゴリ名を入力してください");
+      return;
+    }
+    if (name === "すべて" || name === "未分類") {
+      toast.error("このカテゴリ名は使用できません");
+      return;
+    }
+    try {
+      await addCategoryMutation.mutateAsync({ name });
+      setNewCategoryName("");
+      await utils.zaico.getCategories.invalidate();
+      toast.success(`「${name}」を追加しました`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "カテゴリの追加に失敗しました";
+      toast.error(msg);
+    }
+  }
+
+  async function handleDeleteCategory() {
+    if (!categoryDeleteTarget) return;
+    const name = categoryDeleteTarget;
+    try {
+      await deleteCategoryMutation.mutateAsync({ name });
+      if (selectedCategory === name) handleSetSelectedCategory("すべて");
+      setCategoryDeleteTarget(null);
+      await Promise.all([
+        utils.zaico.getCategories.invalidate(),
+        utils.zaico.getInventories.invalidate(),
+        utils.zaico.getPurchasesWithCategory.invalidate(),
+      ]);
+      refetch();
+      toast.success(`「${name}」を削除しました`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "カテゴリの削除に失敗しました";
+      toast.error(msg);
+    }
+  }
+
   // 在庫メモ履歴ダイアログ
   const [memoHistoryItem, setMemoHistoryItem] = useState<InventoryItem | null>(null);
   const { data: memoHistoryData } = trpc.inventoryMemo.list.useQuery(
@@ -516,17 +563,21 @@ export default function Deliveries() {
 
   const today = new Date().toISOString().split("T")[0];
 
-  // カテゴリ一覧を集計
-  const categories = useMemo(() => {
-    if (!inventories) return ["すべて"];
+  const categoryOptions = useMemo(() => {
     const cats = new Set<string>();
-    for (const inv of inventories as InventoryItem[]) {
-      if (inv.quantity === null || inv.quantity === undefined) continue;
-      const cat = inv.categories?.[0] ?? inv.category ?? "";
-      cats.add(cat || "未分類");
+    for (const cat of managedCategories ?? []) {
+      if (cat && cat !== "すべて" && cat !== "未分類") cats.add(cat);
     }
-    return ["すべて", ...Array.from(cats).sort()];
-  }, [inventories]);
+    for (const inv of (inventories ?? []) as InventoryItem[]) {
+      if (inv.quantity === null || inv.quantity === undefined) continue;
+      const cat = (inv.categories?.[0] ?? inv.category ?? "").trim();
+      if (cat && cat !== "未分類") cats.add(cat);
+    }
+    return Array.from(cats).sort((a, b) => a.localeCompare(b, "ja"));
+  }, [inventories, managedCategories]);
+
+  // カテゴリ一覧を集計
+  const categories = useMemo(() => ["すべて", "未分類", ...categoryOptions], [categoryOptions]);
 
   // カテゴリ + 検索フィルター
   const filteredInventories = useMemo(() => {
@@ -1164,6 +1215,10 @@ export default function Deliveries() {
               })}
             </SelectContent>
           </Select>
+          <Button variant="outline" size="sm" onClick={() => setShowCategoryDialog(true)}>
+            <Plus className="h-4 w-4 mr-1.5" />
+            カテゴリ管理
+          </Button>
           {selectedCategory !== "すべて" && (
             <button
               onClick={() => handleSetSelectedCategory("すべて")}
@@ -2267,6 +2322,81 @@ export default function Deliveries() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <Dialog open={showCategoryDialog} onOpenChange={setShowCategoryDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5 text-primary" />
+              カテゴリ管理
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex gap-2">
+              <Input
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleAddCategory();
+                }}
+                placeholder="カテゴリ名"
+              />
+              <Button
+                onClick={handleAddCategory}
+                disabled={addCategoryMutation.isPending || !newCategoryName.trim()}
+              >
+                {addCategoryMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+            <div className="rounded-md border max-h-72 overflow-y-auto">
+              {categoryOptions.length === 0 ? (
+                <p className="px-3 py-6 text-sm text-muted-foreground text-center">カテゴリがありません</p>
+              ) : (
+                categoryOptions.map((cat) => (
+                  <div key={cat} className="flex items-center justify-between gap-3 px-3 py-2 border-b last:border-0">
+                    <span className="text-sm font-medium truncate">{cat}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                      onClick={() => setCategoryDeleteTarget(cat)}
+                      disabled={deleteCategoryMutation.isPending}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCategoryDialog(false)}>閉じる</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <AlertDialog open={!!categoryDeleteTarget} onOpenChange={(open) => { if (!open) setCategoryDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>カテゴリを削除しますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              「{categoryDeleteTarget}」を在庫・入庫予定から外して未分類にします。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteCategoryMutation.isPending}>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteCategory}
+              disabled={deleteCategoryMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteCategoryMutation.isPending ? "削除中..." : "削除"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {/* ============================================================ */}
       {/* 在庫編集ダイアログ */}
       {/* ============================================================ */}
@@ -2321,7 +2451,7 @@ export default function Deliveries() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">未分類</SelectItem>
-                  {categories.filter(c => c !== "すべて").map((cat) => (
+                  {categoryOptions.map((cat) => (
                     <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                   ))}
                 </SelectContent>
@@ -2609,7 +2739,7 @@ export default function Deliveries() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">未分類</SelectItem>
-                  {categories.filter(c => c !== "すべて").map((cat) => (
+                  {categoryOptions.map((cat) => (
                     <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                   ))}
                 </SelectContent>
