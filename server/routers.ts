@@ -144,26 +144,77 @@ import {
  * GITHUB_CSV_TOKEN が設定されている場合は Authorization ヘッダーを付与する
  */
 async function fetchGithubCsv(): Promise<string> {
-  const token = process.env.GITHUB_CSV_TOKEN;
-  const url = "https://raw.githubusercontent.com/07-hajime-tokyo/merukanri-data-site/main/data.csv";
-  const headers: Record<string, string> = {};
-  if (token) headers["Authorization"] = `token ${token}`;
-  const res = await fetch(url, { headers });
-  if (!res.ok) throw new Error(`CSV fetch failed: ${res.status}`);
-  return res.text();
+  return fetchCsvFromGithub(
+    process.env.MERUKANRI_CSV_URL ?? "https://raw.githubusercontent.com/07-hajime-tokyo/merukanri-data-site/main/data.csv",
+    "CSV fetch failed",
+  );
 }
 
 /**
  * 発注管理専用: csv-data-site リポジトリから CSV テキストを取得するヘルパー
  */
 async function fetchOrderCsv(): Promise<string> {
-  const token = process.env.GITHUB_CSV_TOKEN;
-  const url = "https://raw.githubusercontent.com/07-hajime-tokyo/csv-data-site/main/data.csv";
-  const headers: Record<string, string> = {};
-  if (token) headers["Authorization"] = `token ${token}`;
-  const res = await fetch(url, { headers });
-  if (!res.ok) throw new Error(`Order CSV fetch failed: ${res.status}`);
-  return res.text();
+  return fetchCsvFromGithub(
+    process.env.GITHUB_CSV_URL ?? "https://raw.githubusercontent.com/07-hajime-tokyo/csv-data-site/main/data.csv",
+    "Order CSV fetch failed",
+  );
+}
+
+function getGithubCsvToken(): string | undefined {
+  const token = process.env.GITHUB_CSV_TOKEN?.trim();
+  if (!token) return undefined;
+  if (/^(github-token|your_|YOUR_|<|placeholder)/.test(token)) return undefined;
+  return token;
+}
+
+function buildGithubHeaders(accept = "text/plain"): Record<string, string> {
+  const headers: Record<string, string> = { Accept: accept };
+  const token = getGithubCsvToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+
+function rawGithubUrlToContentsApi(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname !== "raw.githubusercontent.com") return null;
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    if (parts.length < 4) return null;
+    const [owner, repo, ref, ...pathParts] = parts;
+    const path = pathParts.map((part) => encodeURIComponent(part)).join("/");
+    return `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(ref)}`;
+  } catch {
+    return null;
+  }
+}
+
+async function readGithubCsvResponse(res: Response): Promise<string> {
+  const text = await res.text();
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("{")) return text;
+  try {
+    const json = JSON.parse(trimmed) as { content?: string; encoding?: string };
+    if (json.content && json.encoding === "base64") {
+      return Buffer.from(json.content.replace(/\s/g, ""), "base64").toString("utf8");
+    }
+  } catch {
+    // Fall through and return the original text.
+  }
+  return text;
+}
+
+async function fetchCsvFromGithub(url: string, errorLabel: string): Promise<string> {
+  const rawRes = await fetch(url, { headers: buildGithubHeaders() });
+  if (rawRes.ok) return readGithubCsvResponse(rawRes);
+
+  const apiUrl = rawGithubUrlToContentsApi(url);
+  if (apiUrl && getGithubCsvToken()) {
+    const apiRes = await fetch(apiUrl, { headers: buildGithubHeaders("application/vnd.github+json") });
+    if (apiRes.ok) return readGithubCsvResponse(apiRes);
+    throw new Error(`${errorLabel}: ${rawRes.status}; GitHub API fallback: ${apiRes.status}`);
+  }
+
+  throw new Error(`${errorLabel}: ${rawRes.status}`);
 }
 
 /**
@@ -222,6 +273,53 @@ function parseCSVLine(line: string): string[] {
   }
   result.push(current);
   return result;
+}
+
+type OrderCsvRow = {
+  partner: string;
+  invoiceNo: string;
+  paymentDate: string;
+  productName: string;
+  orderQty: number;
+  sellingPrice: number | null;
+  currency: string;
+  status: string;
+};
+
+function parseOrderCsvRows(text: string): OrderCsvRow[] {
+  const rows: OrderCsvRow[] = [];
+  const lines = text.split(/\r?\n/);
+  for (let i = 3; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line?.trim()) continue;
+    const cols = parseCSVLine(line).map((col) => col.trim());
+    const partner = cols[1] ?? "";
+    const invoiceNo = cols[2] ?? "";
+    const paymentDate = cols[3] ?? "";
+    const productName = cols[4] ?? "";
+    const orderQtyStr = cols[5] ?? "0";
+    const sellingPriceStr = cols[6] ?? "";
+    const currency = cols[7] ?? "";
+    const status9 = cols[9] ?? "";
+    const status10 = cols[10] ?? "";
+    const status = (status9.toLowerCase() === "complete" || status10.toLowerCase() === "complete")
+      ? "complete"
+      : status9 || status10;
+    if (!invoiceNo || !/^\d+$/.test(invoiceNo)) continue;
+    const orderQty = parseInt(orderQtyStr, 10) || 0;
+    const sellingPrice = sellingPriceStr ? parseFloat(sellingPriceStr) || null : null;
+    rows.push({
+      partner: partner || "その他",
+      invoiceNo,
+      paymentDate,
+      productName,
+      orderQty,
+      sellingPrice,
+      currency,
+      status,
+    });
+  }
+  return rows;
 }
 
 function resolveOperatorToken(operatorKey?: string): string | undefined {
@@ -566,7 +664,7 @@ export const appRouter = router({
         for (let i = 3; i < lines.length; i++) {
           const line = lines[i];
           if (!line.trim()) continue;
-          const cols = line.split(",");
+          const cols = parseCSVLine(line).map((col) => col.trim());
           const invoiceNo = cols[2]?.trim() ?? "";
           const supplierName = cols[13]?.trim() ?? "";
           if (!invoiceNo || !/^\d+$/.test(invoiceNo)) continue;
@@ -1370,13 +1468,11 @@ export const appRouter = router({
             let csvProducts: Array<{ name: string; qty: number }> = [];
             try {
               const csvText = await fetchOrderCsv();
-              const lines = csvText.split(/\r?\n/);
-              for (let i = 3; i < lines.length; i++) {
-                const cols = lines[i].split(",");
-                const csvInvoiceNo = cols[2]?.trim() ?? "";
+              for (const row of parseOrderCsvRows(csvText)) {
+                const csvInvoiceNo = row.invoiceNo;
                 if (csvInvoiceNo !== invoiceNo) continue;
-                const productName = cols[4]?.trim() ?? "";
-                const orderQty = parseInt(cols[5]?.trim() ?? "0", 10) || 0;
+                const productName = row.productName;
+                const orderQty = row.orderQty;
                 if (productName) csvProducts.push({ name: productName, qty: orderQty });
               }
             } catch { /* CSV取得失敗時は商品名直接使用 */ }
@@ -2179,38 +2275,7 @@ export const appRouter = router({
     getCsvData: publicProcedure.query(async () => {
       try {
         const text = await fetchOrderCsv();
-        const lines = text.split(/\r?\n/);
-        // データ行はindex 3以降（0:空行, 1:更新日時, 2:ヘッダー, 3以降:データ）
-        type CsvRow = {
-          partner: string;
-          invoiceNo: string;
-          productName: string;
-          orderQty: number;
-          status: string;
-          paymentDate: string;
-          sellingPrice: number | null;
-          currency: string;
-        };
-        const rows: CsvRow[] = [];
-        for (let i = 3; i < lines.length; i++) {
-          const line = lines[i];
-          if (!line.trim()) continue;
-          // CSVパース（カンマ区切り、クォートなし）
-          const cols = line.split(",");
-          const partner = cols[1]?.trim() ?? "";
-          const invoiceNo = cols[2]?.trim() ?? "";
-          const paymentDate = cols[3]?.trim() ?? "";
-          const productName = cols[4]?.trim() ?? "";
-          const orderQtyStr = cols[5]?.trim() ?? "0";
-          const sellingPriceStr = cols[6]?.trim() ?? "";
-          const currency = cols[7]?.trim() ?? "";
-          const status = cols[9]?.trim() ?? "";
-          if (!invoiceNo || !/^\d+$/.test(invoiceNo)) continue;
-          const orderQty = parseInt(orderQtyStr, 10) || 0;
-          const sellingPrice = sellingPriceStr ? parseFloat(sellingPriceStr) || null : null;
-          rows.push({ partner: partner || "その他", invoiceNo, productName, orderQty, status, paymentDate, sellingPrice, currency });
-        }
-        return rows;
+        return parseOrderCsvRows(text);
       } catch (err) {
         console.error("CSV fetch error:", err);
         return [];
@@ -2277,24 +2342,7 @@ export const appRouter = router({
       let csvRows: CsvRow[] = [];
       try {
         const text = await fetchOrderCsv();
-        const lines = text.split(/\r?\n/);
-        for (let i = 3; i < lines.length; i++) {
-          const line = lines[i];
-          if (!line.trim()) continue;
-          const cols = line.split(",");
-          const partner = cols[1]?.trim() ?? "";
-          const invoiceNo = cols[2]?.trim() ?? "";
-          const paymentDate = cols[3]?.trim() ?? "";
-          const productName = cols[4]?.trim() ?? "";
-          const orderQtyStr = cols[5]?.trim() ?? "0";
-          // col[9] または col[10] のいずれかが complete なら complete と判定
-          const status9 = cols[9]?.trim() ?? "";
-          const status10 = cols[10]?.trim() ?? "";
-          const status = (status9.toLowerCase() === "complete" || status10.toLowerCase() === "complete") ? "complete" : status9;
-          if (!invoiceNo || !/^\d+$/.test(invoiceNo)) continue;
-          const orderQty = parseInt(orderQtyStr, 10) || 0;
-          csvRows.push({ partner: partner || "その他", invoiceNo, productName, orderQty, status, paymentDate });
-        }
+        csvRows = parseOrderCsvRows(text);
       } catch (e) {
         console.error("CSV parse error:", e);
       }
@@ -2722,19 +2770,8 @@ export const appRouter = router({
     getIncompleteInvoices: publicProcedure.query(async () => {
       try {
         const text = await fetchOrderCsv();
-        const lines = text.split(/\r?\n/);
         type CsvRow = { partner: string; invoiceNo: string; status: string; };
-        const rows: CsvRow[] = [];
-        for (let i = 3; i < lines.length; i++) {
-          const line = lines[i];
-          if (!line.trim()) continue;
-          const cols = line.split(",");
-          const partner = cols[1]?.trim() ?? "";
-          const invoiceNo = cols[2]?.trim() ?? "";
-          const status = cols[9]?.trim() ?? "";
-          if (!invoiceNo || !/^\d+$/.test(invoiceNo)) continue;
-          rows.push({ partner: partner || "その他", invoiceNo, status });
-        }
+        const rows: CsvRow[] = parseOrderCsvRows(text).map(({ partner, invoiceNo, status }) => ({ partner, invoiceNo, status }));
         // 完了ステータス以外を未完了として返す
         const allMemos = await getAllInvoiceMemos();
         const manualCompleteSet = new Set<string>(
@@ -3171,27 +3208,18 @@ export const appRouter = router({
       const csvRows: CsvInvoiceRow[] = [];
       try {
         if (csvText) {
-          const lines = csvText.split(/\r?\n/);
-          for (let i = 3; i < lines.length; i++) {
-            const line = lines[i];
-            if (!line.trim()) continue;
-            const cols = line.split(",");
-            const partner = cols[1]?.trim() ?? "";
-            const invoiceNo = cols[2]?.trim() ?? "";
-            const paymentDate = cols[3]?.trim() ?? "";
-            const productName = cols[4]?.trim() ?? "";
-            const orderQtyStr = cols[5]?.trim() ?? "0";
-            const sellingPriceStr = cols[6]?.trim() ?? "";
-            const currency = cols[7]?.trim() ?? "";
-            // 行単位のstatus: cols[9]またはcols[10]がcompleteなら行完了
-            const status9 = cols[9]?.trim() ?? "";
-            const status10 = cols[10]?.trim() ?? "";
-            const rowStatus = (status9.toLowerCase() === "complete" || status10.toLowerCase() === "complete") ? "complete" : "";
-            if (!invoiceNo || !/^\d+$/.test(invoiceNo)) continue;
-            const orderQty = parseInt(orderQtyStr, 10) || 0;
-            const sellingPrice = sellingPriceStr ? parseFloat(sellingPriceStr) || null : null;
-            csvRows.push({ partner: partner || "その他", invoiceNo, paymentDate, productName, orderQty, sellingPrice, currency, rowStatus });
-          }
+          csvRows.push(
+            ...parseOrderCsvRows(csvText).map((row) => ({
+              partner: row.partner,
+              invoiceNo: row.invoiceNo,
+              paymentDate: row.paymentDate,
+              productName: row.productName,
+              orderQty: row.orderQty,
+              sellingPrice: row.sellingPrice,
+              currency: row.currency,
+              rowStatus: row.status === "complete" ? "complete" : "",
+            })),
+          );
         }
       } catch (e) {
         console.error("CSV fetch error:", e);
@@ -4493,18 +4521,12 @@ export const appRouter = router({
       let csvData: Record<string, { paymentDate: string; products: Array<{ name: string; qty: number }> }> = {};
       try {
         const csvText = await fetchOrderCsv();
-        const lines = csvText.split("\n");
-        for (let i = 3; i < lines.length; i++) {
-          const line = lines[i];
-          if (!line.trim()) continue;
-          const cols = line.split(",");
-          const partner = cols[1]?.trim() ?? "";
-          const invoiceNo = cols[2]?.trim() ?? "";
-          const paymentDate = cols[3]?.trim() ?? "";
-          const productName = cols[4]?.trim() ?? "";
-          const orderQtyStr = cols[5]?.trim() ?? "0";
-          if (!invoiceNo || !/^\d+$/.test(invoiceNo)) continue;
-          const orderQty = parseInt(orderQtyStr, 10) || 0;
+        for (const row of parseOrderCsvRows(csvText)) {
+          const partner = row.partner;
+          const invoiceNo = row.invoiceNo;
+          const paymentDate = row.paymentDate;
+          const productName = row.productName;
+          const orderQty = row.orderQty;
           // 取引先フィルタリング（シート名と取引先を照合）
           const isLuca = sheetName === "独発送管理";
           const isSamee = sheetName === "サミー発送管理";
@@ -4842,19 +4864,13 @@ export const appRouter = router({
       let csvData: Record<string, { partner: string; paymentDate: string; products: Array<{ name: string; qty: number }> }> = {};
       try {
         const csvText = await fetchOrderCsv();
-        const lines = csvText.split("\n");
-        for (let i = 3; i < lines.length; i++) {
-          const line = lines[i];
-          if (!line.trim()) continue;
-          const cols = line.split(",");
-          const partner = cols[1]?.trim() ?? "";
-          const invoiceNo = cols[2]?.trim() ?? "";
-          const paymentDate = cols[3]?.trim() ?? "";
-          const productName = cols[4]?.trim() ?? "";
-          const orderQtyStr = cols[5]?.trim() ?? "0";
-          const status = cols[9]?.trim() ?? "";
-          if (!invoiceNo || !/^\d+$/.test(invoiceNo)) continue;
-          const orderQty = parseInt(orderQtyStr, 10) || 0;
+        for (const row of parseOrderCsvRows(csvText)) {
+          const partner = row.partner;
+          const invoiceNo = row.invoiceNo;
+          const paymentDate = row.paymentDate;
+          const productName = row.productName;
+          const orderQty = row.orderQty;
+          const status = row.status;
           if (!csvData[invoiceNo]) csvData[invoiceNo] = { partner, paymentDate, products: [] };
           if (productName) csvData[invoiceNo].products.push({ name: productName, qty: orderQty });
           // statusをcompleteとして記録
