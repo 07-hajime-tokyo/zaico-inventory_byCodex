@@ -1,0 +1,1 @@
+ALTER TABLE `partner_messages` ADD `isReadByPartner` int DEFAULT 0 NOT NULL;

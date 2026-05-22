@@ -1,0 +1,1 @@
+ALTER TABLE `fedex_shipments` ADD `historyId` int;

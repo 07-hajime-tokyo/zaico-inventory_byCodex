@@ -1,0 +1,1 @@
+ALTER TABLE `invoice_memos` MODIFY COLUMN `memo` text NOT NULL;

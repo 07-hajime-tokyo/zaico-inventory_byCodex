@@ -1,0 +1,1 @@
+ALTER TABLE `local_purchases` MODIFY COLUMN `zaicoId` bigint;

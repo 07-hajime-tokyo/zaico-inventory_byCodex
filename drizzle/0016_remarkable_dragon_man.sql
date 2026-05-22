@@ -1,0 +1,1 @@
+ALTER TABLE `monthly_domestic_items` ADD `is_paid` int DEFAULT 0 NOT NULL;

@@ -1,0 +1,1 @@
+ALTER TABLE `purchase_extras` ADD `carrier` varchar(50);

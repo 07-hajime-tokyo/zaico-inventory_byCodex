@@ -1,0 +1,209 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1772772379754,
+      "tag": "0000_faithful_absorbing_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1772772475120,
+      "tag": "0001_wandering_crystal",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1772780520354,
+      "tag": "0002_neat_norman_osborn",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1773619427393,
+      "tag": "0003_wandering_vermin",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1773627673898,
+      "tag": "0004_dazzling_sprite",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1773724682512,
+      "tag": "0005_eminent_ma_gnuci",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1773736166841,
+      "tag": "0006_workable_rafael_vega",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1773797943439,
+      "tag": "0007_sturdy_dexter_bennett",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1773815366913,
+      "tag": "0008_nasty_susan_delgado",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1774492370816,
+      "tag": "0009_classy_zuras",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1774493654505,
+      "tag": "0010_fancy_blur",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1774493686323,
+      "tag": "0011_broad_ken_ellis",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1774586865823,
+      "tag": "0012_fantastic_barracuda",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "5",
+      "when": 1774756101250,
+      "tag": "0013_quick_brother_voodoo",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "5",
+      "when": 1774827827404,
+      "tag": "0014_tearful_omega_sentinel",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "5",
+      "when": 1774924885477,
+      "tag": "0015_amazing_johnny_blaze",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "5",
+      "when": 1774926575685,
+      "tag": "0016_remarkable_dragon_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1775534999060,
+      "tag": "0017_black_infant_terrible",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1775551554370,
+      "tag": "0018_glossy_guardsmen",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1775637618629,
+      "tag": "0019_concerned_lady_ursula",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "5",
+      "when": 1775807770248,
+      "tag": "0020_watery_polaris",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "5",
+      "when": 1776043048852,
+      "tag": "0021_steep_eternals",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "5",
+      "when": 1776043082050,
+      "tag": "0022_reflective_lord_tyger",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1776043898896,
+      "tag": "0023_bored_miek",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1776067827622,
+      "tag": "0024_calm_zombie",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "5",
+      "when": 1776069432690,
+      "tag": "0025_concerned_sasquatch",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "5",
+      "when": 1776229634732,
+      "tag": "0026_robust_franklin_storm",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "5",
+      "when": 1778223731943,
+      "tag": "0027_green_aqueduct",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "5",
+      "when": 1778733391774,
+      "tag": "0028_overconfident_nemesis",
+      "breakpoints": true
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+ALTER TABLE `delivery_histories` ADD `cancelledItemsJson` text;
