@@ -723,7 +723,7 @@ export default function Purchases() {
             ? [newManagementNo, parts[1] ?? "", parts[2] ?? ""].join(", ")
             : item.etc ?? "";
           return {
-            id: item.id,
+            ...(item.id > 0 && { id: item.id }),
             inventoryId: item.inventory_id,
             ...(edit.unitPrice !== "" && { unitPrice: parseFloat(edit.unitPrice) }),
             ...(edit.estimatedDate !== "" && { estimatedPurchaseDate: edit.estimatedDate }),

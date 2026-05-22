@@ -791,7 +791,7 @@ export const appRouter = router({
         estimatedPurchaseDate: z.string().optional(),
         memo: z.string().optional(),
         purchaseItems: z.array(z.object({
-          id: z.number().int().positive().optional(),
+          id: z.number().int().nonnegative().optional(),
           inventoryId: z.number().int().positive(),
           unitPrice: z.number().optional(),
           quantity: z.number().optional(),
@@ -806,11 +806,15 @@ export const appRouter = router({
         if (!zaicoEnabled) {
           // Zaico連携OFF: ローカルDBを直接更新
           const { localPurchases: lpTbl, localInventories: liTbl } = await import("../drizzle/schema");
-          const { eq } = await import("drizzle-orm");
+          const { eq, or } = await import("drizzle-orm");
           const db = await getDb();
           if (!db) throw new Error("Database not available");
-          // purchaseIdでlocal_purchasesを取得
-          const [lp] = await db.select().from(lpTbl).where(eq(lpTbl.id, input.purchaseId)).limit(1);
+          // purchaseIdはlocal_purchases.idまたは同期元のzaicoIdとして渡る。
+          const [lp] = await db
+            .select()
+            .from(lpTbl)
+            .where(or(eq(lpTbl.id, input.purchaseId), eq(lpTbl.zaicoId, input.purchaseId)))
+            .limit(1);
           if (lp) {
             // purchaseItemsの先頭要素からunitPrice・etcを取得
             const firstItem = input.purchaseItems?.[0];
@@ -846,6 +850,10 @@ export const appRouter = router({
         if (input.estimatedPurchaseDate !== undefined) payload.estimated_purchase_date = input.estimatedPurchaseDate;
         if (input.memo !== undefined) payload.memo = input.memo;
         if (input.purchaseItems) {
+          const invalidItem = input.purchaseItems.find((item) => !item.id || item.id <= 0);
+          if (invalidItem) {
+            throw new Error("Zaico連携ONでは発注明細IDが必要です");
+          }
           payload.purchase_items = input.purchaseItems.map((item) => ({
             id: item.id!,
             inventory_id: item.inventoryId,
