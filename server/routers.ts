@@ -1147,14 +1147,20 @@ export const appRouter = router({
           purchaseId: z.number().int().positive().optional(),
           inventoryId: z.number().int().positive(),
           supplierName: z.string().max(200).nullable(),
+          supplierUrl: z.string().max(500).nullable().optional(),
         })
       )
       .mutation(async ({ input }) => {
         const zaicoEnabled = await isZaicoEnabled();
+        const normalizedSupplierUrl = (() => {
+          const value = input.supplierUrl?.trim();
+          if (!value) return null;
+          return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+        })();
         if (!zaicoEnabled) {
           const localInv = await getLocalInventoryByZaicoIdOrId(input.inventoryId);
           if (localInv) {
-            await updateLocalInventory(localInv.id, { supplierName: input.supplierName });
+            await updateLocalInventory(localInv.id, { supplierName: input.supplierName, supplierUrl: normalizedSupplierUrl });
           }
           const db = await getDb();
           if (db) {
@@ -1171,16 +1177,15 @@ export const appRouter = router({
               }
             });
             await Promise.all(
-              targets.map((p) => db.update(lpTbl).set({ supplierName: input.supplierName }).where(eq(lpTbl.id, p.id)))
+              targets.map((p) => db.update(lpTbl).set({ supplierName: input.supplierName, supplierUrl: normalizedSupplierUrl }).where(eq(lpTbl.id, p.id)))
             );
           }
         } else {
-          // supplierUrlは変更しない（supplierNameのみ更新）
           const existing = await getInventoryExtraByZaicoId(input.inventoryId);
           await upsertInventoryExtra({
             zaicoInventoryId: input.inventoryId,
             supplierName: input.supplierName,
-            supplierUrl: existing?.supplierUrl ?? null,
+            supplierUrl: normalizedSupplierUrl ?? existing?.supplierUrl ?? null,
           }).catch(() => {});
         }
         return { success: true };

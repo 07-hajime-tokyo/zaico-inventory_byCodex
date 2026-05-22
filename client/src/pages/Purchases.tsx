@@ -94,6 +94,7 @@ interface EditState {
   carrier: string;
   note: string;
   supplierName: string;
+  supplierUrl: string;
   // 商品別編集: inventory_id -> { unitPrice, managementNo, estimatedDate }
   itemEdits: Record<number, { unitPrice: string; managementNo: string; estimatedDate: string }>;
 }
@@ -442,7 +443,7 @@ export default function Purchases() {
   const { data: currentUser } = trpc.auth.me.useQuery();
 
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editState, setEditState] = useState<EditState>({ shipDate: "", trackingNumber: "", carrier: "auto", note: "", supplierName: "", itemEdits: {} });
+  const [editState, setEditState] = useState<EditState>({ shipDate: "", trackingNumber: "", carrier: "auto", note: "", supplierName: "", supplierUrl: "", itemEdits: {} });
   const updateSupplierNameOnlyMutation = trpc.zaico.updateSupplierNameOnly.useMutation();
   const [processingIds, setProcessingIds] = useState<Set<number>>(new Set());
   const [deletingIds, setDeletingIds] = useState<Set<number>>(new Set());
@@ -691,13 +692,14 @@ export default function Purchases() {
       carrier: purchase.extra?.carrier ?? "auto",
       note: purchase.extra?.note ?? "",
       supplierName: purchase.csvSupplierName ?? "",
+      supplierUrl: purchase.csvSupplierUrl ?? "",
       itemEdits,
     });
   }
 
   function cancelEdit() {
     setEditingId(null);
-    setEditState({ shipDate: "", trackingNumber: "", carrier: "auto", note: "", supplierName: "", itemEdits: {} });
+    setEditState({ shipDate: "", trackingNumber: "", carrier: "auto", note: "", supplierName: "", supplierUrl: "", itemEdits: {} });
   }
 
   async function saveEdit(purchaseId: number, purchase: Purchase) {
@@ -746,6 +748,21 @@ export default function Purchases() {
             purchaseId,
             inventoryId: firstItem.inventory_id,
             supplierName: editState.supplierName || null,
+            supplierUrl: editState.supplierUrl.trim() || null,
+          });
+        }
+      }
+      if (
+        editState.supplierName === (purchase.csvSupplierName ?? "") &&
+        editState.supplierUrl !== (purchase.csvSupplierUrl ?? "")
+      ) {
+        const firstItem = purchase.purchase_items[0];
+        if (firstItem?.inventory_id) {
+          await updateSupplierNameOnlyMutation.mutateAsync({
+            purchaseId,
+            inventoryId: firstItem.inventory_id,
+            supplierName: editState.supplierName || null,
+            supplierUrl: editState.supplierUrl.trim() || null,
           });
         }
       }
@@ -1474,6 +1491,18 @@ export default function Purchases() {
                           placeholder="例: 駿河屋 盛岡MOSSビル店"
                           value={editState.supplierName}
                           onChange={(e) => setEditState((s) => ({ ...s, supplierName: e.target.value }))}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground block mb-1">
+                          仕入先URL
+                        </label>
+                        <Input
+                          type="text"
+                          placeholder="https://example.com/item"
+                          value={editState.supplierUrl}
+                          onChange={(e) => setEditState((s) => ({ ...s, supplierUrl: e.target.value }))}
                           className="h-8 text-sm"
                         />
                       </div>
