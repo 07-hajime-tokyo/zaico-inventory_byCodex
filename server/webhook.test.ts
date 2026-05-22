@@ -195,6 +195,38 @@ describe("GAS Webhook エンドポイント", () => {
       );
     });
 
+    it("supplierDetailがある場合はG列/URL由来のsupplierと結合される", async () => {
+      const { upsertLocalInventory, upsertLocalPurchase } = await import("./db");
+      const res = await request(app)
+        .post("/api/gas-webhook/register-product")
+        .send({
+          secret: "test-secret-key-12345",
+          productName: "テスト商品",
+          srnNumber: "テスト",
+          supplier: "Yahoo!ショッピング",
+          supplierDetail: "ゴルフパートナー",
+          supplierUrl: "https://store.shopping.yahoo.co.jp/golfpartner/",
+          quantity: 0,
+          orderQuantity: 1,
+          purchasePrice: 15307,
+          registerType: "both",
+        });
+
+      expect(res.status).toBe(200);
+      expect(upsertLocalInventory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          supplierName: "Yahoo!ショッピング ゴルフパートナー",
+          supplierUrl: "https://store.shopping.yahoo.co.jp/golfpartner/",
+        })
+      );
+      expect(upsertLocalPurchase).toHaveBeenCalledWith(
+        expect.objectContaining({
+          supplierName: "Yahoo!ショッピング ゴルフパートナー",
+          supplierUrl: "https://store.shopping.yahoo.co.jp/golfpartner/",
+        })
+      );
+    });
+
     it("registerType=bothで在庫と発注済みの両方が登録される", async () => {
       const { upsertLocalInventory, upsertLocalPurchase } = await import("./db");
       const res = await request(app)

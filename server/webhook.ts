@@ -79,6 +79,17 @@ interface GasWebhookPayload {
   rowIndex?: number;         // スプレッドシートの行番号（デバッグ用）
 }
 
+function resolveSupplierName(supplier?: string | null, supplierDetail?: string | null): string | null {
+  const base = supplier?.trim() ?? "";
+  const detail = supplierDetail?.trim() ?? "";
+  if (base && detail) {
+    if (base.includes(detail)) return base;
+    if (detail.includes(base)) return detail;
+    return `${base} ${detail}`;
+  }
+  return base || detail || null;
+}
+
 export function registerWebhookRoutes(app: Express): void {
   /**
    * POST /api/gas-webhook/register-product
@@ -119,8 +130,8 @@ export function registerWebhookRoutes(app: Express): void {
       } = {};
 
       // supplier・仕入先URLは登録種別に関わらず共通で使用
-      // supplier（G列ベースの組み合わせ済み仕入先名）を優先し、なければsupplierDetail（N列）を使用
-      const resolvedSupplierName = body.supplier?.trim() || body.supplierDetail?.trim() || null;
+      // G列/URL由来の仕入先名 + N列の店舗・出品者名を表示名にする
+      const resolvedSupplierName = resolveSupplierName(body.supplier, body.supplierDetail);
       // https://が抜けている場合に補完
       const normalizedSupplierUrl = body.supplierUrl
         ? (body.supplierUrl.startsWith('http') ? body.supplierUrl : `https://${body.supplierUrl}`)
@@ -286,7 +297,7 @@ export function registerWebhookRoutes(app: Express): void {
       const results: Array<{ rowIndex: number; productName: string; status: string; supplierName: string | null }> = [];
 
       for (const item of body.items) {
-        const resolvedSupplierName = item.supplierDetail?.trim() || item.supplier?.trim() || null;
+        const resolvedSupplierName = resolveSupplierName(item.supplier, item.supplierDetail);
 
         // https://が抜けている場合に補完
         const normalizedItemSupplierUrl = item.supplierUrl

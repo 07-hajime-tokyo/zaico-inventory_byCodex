@@ -40,7 +40,12 @@ const DEFAULT_WEBHOOK_URL = "https://your-app.example.com/api/gas-webhook/regist
 const DEFAULT_WEBHOOK_SECRET = "";
 
 function getWebhookUrl() {
-  return PropertiesService.getScriptProperties().getProperty("GAS_WEBHOOK_URL") || DEFAULT_WEBHOOK_URL;
+  const raw = PropertiesService.getScriptProperties().getProperty("GAS_WEBHOOK_URL") || DEFAULT_WEBHOOK_URL;
+  return raw
+    .toString()
+    .trim()
+    .replace(/^GAS_WEBHOOK_URL\s*=\s*/i, "")
+    .replace(/^['"]|['"]$/g, "");
 }
 
 function getWebhookSecret() {
