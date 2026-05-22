@@ -12,13 +12,13 @@ import { localInventories as localInvTable } from "../drizzle/schema";
 import { eq, desc } from "drizzle-orm";
 
 /**
- * 商品名からZaicoカテゴリーを自動判別する（GASと同じロジック）
+ * 商品名・仕入先情報からサイト側カテゴリーを自動判別する
  * @param productName - 商品名
- * @returns カテゴリー名（判別できない場合は "ゲーム"）
+ * @returns カテゴリー名（判別できない場合は "未分類"）
  */
 export function getCategoryFromProductName(productName: string, ...context: Array<string | null | undefined>): string {
   const targetText = [productName, ...context].filter(Boolean).join(" ");
-  if (!targetText) return "ゲーム";
+  if (!targetText) return "未分類";
 
   if (/(ゴルフ|golf|ゴルフパートナー|テーラーメイド|taylormade|キャロウェイ|callaway|タイトリスト|titleist|ピン(?!ク)|ping|ミズノ|mizuno|ダンロップ|dunlop|スリクソン|srixon|ゼクシオ|xxio|ブリヂストン|bridgestone|コブラ|cobra|クリーブランド|cleveland|ホンマ|honma|ツアーステージ|tourstage|オノフ|onoff|プロギア|prgr|マルマン|maruman|シャフト|ドライバー|アイアン|ウェッジ|パター|ユーティリティ|フェアウェイ|クラブ|ヘッド|ロフト|フレックス|tour\s*spec|speeder|スピーダー|diamana|ディアマナ|modus|モーダス|ns\s*pro|ventus|ベンタス|tensei|テンセイ)/i.test(targetText)) return "ゴルフ";
   if (/\b(sim|stealth|qi10|m[1-6])\b.*(\d{1,2}(?:\.\d)?\s*[°度]|driver|shaft|fw|ut)/i.test(targetText)) return "ゴルフ";
@@ -63,8 +63,7 @@ export function getCategoryFromProductName(productName: string, ...context: Arra
   // PSP → PSP
   if (/psp/i.test(productName)) return "PSP";
 
-  // 判別できない場合はゲーム機全般として「ゲーム」
-  return "ゲーム";
+  return "未分類";
 }
 
 interface GasWebhookPayload {
@@ -87,7 +86,7 @@ interface GasWebhookPayload {
 function resolveWebhookCategory(body: GasWebhookPayload, productName: string): string {
   const incomingCategory = body.category?.trim();
   const detectedCategory = getCategoryFromProductName(productName, body.supplier, body.supplierDetail, body.supplierUrl);
-  if (!incomingCategory || incomingCategory === "ゲーム") return detectedCategory;
+  if (!incomingCategory || incomingCategory === "ゲーム" || incomingCategory === "未分類") return detectedCategory;
   return incomingCategory;
 }
 

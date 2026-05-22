@@ -99,7 +99,7 @@ describe("GAS Webhook エンドポイント", () => {
       );
     });
 
-    it("判別できない商品名は「ゲーム」カテゴリーになる", async () => {
+    it("判別できない商品名は「未分類」カテゴリーになる", async () => {
       const { upsertLocalInventory } = await import("./db");
       const res = await request(app)
         .post("/api/gas-webhook/register-product")
@@ -112,7 +112,7 @@ describe("GAS Webhook エンドポイント", () => {
 
       expect(res.status).toBe(200);
       expect(upsertLocalInventory).toHaveBeenCalledWith(
-        expect.objectContaining({ category: "ゲーム" })
+        expect.objectContaining({ category: "未分類" })
       );
     });
 
@@ -124,6 +124,26 @@ describe("GAS Webhook エンドポイント", () => {
           secret: "test-secret-key-12345",
           productName: "M6 10.5°",
           category: "ゲーム",
+          supplier: "Yahoo!ショッピング",
+          supplierDetail: "ゴルフパートナー",
+          quantity: 1,
+          registerType: "inventory",
+        });
+
+      expect(res.status).toBe(200);
+      expect(upsertLocalInventory).toHaveBeenCalledWith(
+        expect.objectContaining({ category: "ゴルフ" })
+      );
+    });
+
+    it("GASが未分類を送っても仕入先情報からゴルフに補正される", async () => {
+      const { upsertLocalInventory } = await import("./db");
+      const res = await request(app)
+        .post("/api/gas-webhook/register-product")
+        .send({
+          secret: "test-secret-key-12345",
+          productName: "M6 10.5°",
+          category: "未分類",
           supplier: "Yahoo!ショッピング",
           supplierDetail: "ゴルフパートナー",
           quantity: 1,
@@ -293,10 +313,10 @@ describe("getCategoryFromProductName", () => {
     ["PSP-3000 ブラック", "PSP"],
     ["テーラーメイド M6 10.5°", "ゴルフ"],
     ["シャフト TOUR SPEC フレックスS", "ゴルフ"],
-    ["ファミコンミニ", "ゲーム"],
-    ["メガドライブ", "ゲーム"],
-    ["ゲームボーイアドバンス", "ゲーム"],
-    ["", "ゲーム"],
+    ["ファミコンミニ", "未分類"],
+    ["メガドライブ", "未分類"],
+    ["ゲームボーイアドバンス", "未分類"],
+    ["", "未分類"],
   ];
 
   it.each(cases)("「%s」→ %s", (input, expected) => {
