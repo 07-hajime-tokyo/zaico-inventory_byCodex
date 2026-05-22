@@ -1,8 +1,12 @@
 node_modules/
 .corepack/
+.vercel/
 dist/
+api/index.js
 .env
 .env.*
 !.env.example
 *.log
 verification-*.png
+
+.vercel

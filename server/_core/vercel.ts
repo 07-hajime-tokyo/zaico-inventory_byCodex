@@ -1,4 +1,4 @@
 import "dotenv/config";
-import { createApiApp } from "../server/_core/app";
+import { createApiApp } from "./app";
 
 export default createApiApp();
