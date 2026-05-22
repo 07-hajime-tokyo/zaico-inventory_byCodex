@@ -322,6 +322,60 @@ function parseOrderCsvRows(text: string): OrderCsvRow[] {
   return rows;
 }
 
+type ShipmentDisplayItem = {
+  productNameJa: string;
+  productNameEn: string;
+  quantity: number;
+};
+
+function deliveryHistoryItemsToShipmentItems(itemsJson: string): ShipmentDisplayItem[] {
+  let items: Array<{ title?: string; productNameJa?: string; productNameEn?: string; quantity?: unknown }> = [];
+  try {
+    const parsed = JSON.parse(itemsJson || "[]");
+    items = Array.isArray(parsed) ? parsed : [];
+  } catch {
+    items = [];
+  }
+  return items
+    .map((item) => {
+      const name = String(item.title ?? item.productNameJa ?? item.productNameEn ?? "").trim();
+      const quantity = Number(item.quantity ?? 0);
+      return { productNameJa: name, productNameEn: name, quantity };
+    })
+    .filter((item) => item.productNameJa && item.quantity > 0);
+}
+
+async function alignShipmentItemsWithDeliveryHistories<
+  T extends { deliveryNo: string; itemsJson: string; historyId?: number | null; isManual?: boolean },
+>(shipments: T[]): Promise<T[]> {
+  if (shipments.length === 0) return shipments;
+
+  const histories = await getAllDeliveryHistories().catch(() => []);
+  const latestHistories = [...histories]
+    .filter((history) => history.status === "success")
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  const historyById = new Map<number, (typeof latestHistories)[number]>();
+  const historyByDeliveryNo = new Map<string, (typeof latestHistories)[number]>();
+  for (const history of latestHistories) {
+    historyById.set(history.id, history);
+    if (!historyByDeliveryNo.has(history.deliveryNo)) {
+      historyByDeliveryNo.set(history.deliveryNo, history);
+    }
+  }
+
+  return shipments.map((shipment) => {
+    if (shipment.isManual) return shipment;
+    const history = (shipment.historyId ? historyById.get(shipment.historyId) : undefined)
+      ?? historyByDeliveryNo.get(shipment.deliveryNo);
+    if (!history) return shipment;
+
+    const historyItems = deliveryHistoryItemsToShipmentItems(history.itemsJson);
+    if (historyItems.length === 0) return shipment;
+    return { ...shipment, itemsJson: JSON.stringify(historyItems) };
+  });
+}
+
 function resolveOperatorToken(operatorKey?: string): string | undefined {
   if (!operatorKey || operatorKey === "default") return undefined; // ZAICO_API_TOKENを使用
   if (operatorKey === "A") return process.env.ZAICO_OPERATOR_A_TOKEN || undefined;
@@ -4494,7 +4548,9 @@ export const appRouter = router({
       }
       // 対応するFedEx発送記録を取得
       const allShipments = await getAllFedexShipments();
-      const myShipments = allShipments.filter((s) => s.sheetName === sheetName);
+      const myShipments = await alignShipmentItemsWithDeliveryHistories(
+        allShipments.filter((s) => s.sheetName === sheetName),
+      );
       // 手動発送データも取得して統合
       const allManual = await getAllManualShipments();
       const myManual = allManual.filter((m) => m.sheetName === sheetName);
@@ -4842,7 +4898,7 @@ export const appRouter = router({
      * 管理者向け: 全FedEx発送記録とCSV情報を取得（海外発送ページ用）
      */
     getAdminShipments: protectedProcedure.query(async () => {
-      const allShipments = await getAllFedexShipments();
+      const allShipments = await alignShipmentItemsWithDeliveryHistories(await getAllFedexShipments());
       const manualShipmentsList = await getAllManualShipments();
       // 手動発送データをFedexShipment形式に変換して統合
       const manualAsFedex = manualShipmentsList.map((m) => ({

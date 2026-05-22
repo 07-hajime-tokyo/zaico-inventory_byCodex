@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { normalizeProductName, isReturnProduct, toEnglishProductName, matchesCsvProductName } from "@/lib/productNameUtils";
+import { normalizeProductName, isReturnProduct, toEnglishProductName, matchesCsvProductName, toShipmentProductKey } from "@/lib/productNameUtils";
 import { InvoiceStockSection } from "@/components/InvoiceStockSection";
 import { FedexShipmentDialog, HistoryItem } from "@/pages/DeliveryHistory";
 
@@ -197,12 +197,10 @@ function PartnerView({
         const normalizedItem: ShipmentItem = isReturnProduct(item.productNameJa)
           ? { ...item, productNameJa: normalizeProductName(item.productNameJa), productNameEn: normalizeProductName(item.productNameEn) }
           : item;
-        const normalizedJa = normalizeProductName(normalizedItem.productNameJa ?? "");
-        const normalizedEn = normalizeProductName(normalizedItem.productNameEn ?? "");
+        const productKey = toShipmentProductKey(normalizedItem.productNameJa, normalizedItem.productNameEn);
         const existingRow = group.rows.find(r =>
           r.invoiceNo === invoiceNo &&
-          normalizeProductName(r.item.productNameJa ?? "") === normalizedJa &&
-          normalizeProductName(r.item.productNameEn ?? "") === normalizedEn
+          toShipmentProductKey(r.item.productNameJa, r.item.productNameEn) === productKey
         );
         if (existingRow) {
           existingRow.item = { ...existingRow.item, quantity: existingRow.item.quantity + normalizedItem.quantity };
