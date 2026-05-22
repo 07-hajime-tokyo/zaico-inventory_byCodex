@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { COOKIE_NAME, ADMIN_EMAILS } from "@shared/const";
 import { TRPCError } from "@trpc/server";
+import { eq } from "drizzle-orm";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
@@ -1135,6 +1136,7 @@ export const appRouter = router({
     updateSupplierNameOnly: publicProcedure
       .input(
         z.object({
+          purchaseId: z.number().int().positive().optional(),
           inventoryId: z.number().int().positive(),
           supplierName: z.string().max(200).nullable(),
         })
@@ -1145,6 +1147,24 @@ export const appRouter = router({
           const localInv = await getLocalInventoryByZaicoIdOrId(input.inventoryId);
           if (localInv) {
             await updateLocalInventory(localInv.id, { supplierName: input.supplierName });
+          }
+          const db = await getDb();
+          if (db) {
+            const { localPurchases: lpTbl } = await import("../drizzle/schema");
+            const purchaseRows = await getLocalPurchases();
+            const targets = purchaseRows.filter((p) => {
+              if (input.purchaseId && (p.id === input.purchaseId || p.zaicoId === input.purchaseId)) return true;
+              if (localInv?.id && p.localInventoryId === localInv.id) return true;
+              try {
+                const items = JSON.parse(p.itemsJson ?? "[]");
+                return Array.isArray(items) && items.some((item) => Number(item.inventory_id ?? item.inventoryId) === input.inventoryId);
+              } catch {
+                return false;
+              }
+            });
+            await Promise.all(
+              targets.map((p) => db.update(lpTbl).set({ supplierName: input.supplierName }).where(eq(lpTbl.id, p.id)))
+            );
           }
         } else {
           // supplierUrlは変更しない（supplierNameのみ更新）

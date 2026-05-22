@@ -743,6 +743,7 @@ export default function Purchases() {
         const firstItem = purchase.purchase_items[0];
         if (firstItem?.inventory_id) {
           await updateSupplierNameOnlyMutation.mutateAsync({
+            purchaseId,
             inventoryId: firstItem.inventory_id,
             supplierName: editState.supplierName || null,
           });
