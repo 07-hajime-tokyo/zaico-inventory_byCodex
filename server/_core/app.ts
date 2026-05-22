@@ -6,7 +6,7 @@ import { registerWebhookRoutes } from "../webhook";
 import { registerVerifyCodeRoutes } from "../verify-code";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
-import { serveStatic, setupVite } from "./vite";
+import { serveStatic } from "./static";
 
 export function createApiApp() {
   const app = express();
@@ -34,6 +34,7 @@ export async function createLocalApp(server: Server) {
 
   const isBuiltServer = import.meta.url.includes("/dist/") || import.meta.url.includes("\\dist\\");
   if (process.env.NODE_ENV === "development" || (!process.env.NODE_ENV && !isBuiltServer)) {
+    const { setupVite } = await import("./vite");
     await setupVite(app, server);
   } else {
     serveStatic(app);
