@@ -115,6 +115,26 @@ describe("GAS Webhook エンドポイント", () => {
         expect.objectContaining({ category: "ゲーム" })
       );
     });
+
+    it("GASがゲームを送っても仕入先情報からゴルフに補正される", async () => {
+      const { upsertLocalInventory } = await import("./db");
+      const res = await request(app)
+        .post("/api/gas-webhook/register-product")
+        .send({
+          secret: "test-secret-key-12345",
+          productName: "M6 10.5°",
+          category: "ゲーム",
+          supplier: "Yahoo!ショッピング",
+          supplierDetail: "ゴルフパートナー",
+          quantity: 1,
+          registerType: "inventory",
+        });
+
+      expect(res.status).toBe(200);
+      expect(upsertLocalInventory).toHaveBeenCalledWith(
+        expect.objectContaining({ category: "ゴルフ" })
+      );
+    });
     it("正しいシークレットキーで在庫登録が成功する", async () => {
       const res = await request(app)
         .post("/api/gas-webhook/register-product")
@@ -271,6 +291,8 @@ describe("getCategoryFromProductName", () => {
     ["DSi XL ホワイト", "DSi LL"],
     ["DSi ブラック", "DSi"],
     ["PSP-3000 ブラック", "PSP"],
+    ["テーラーメイド M6 10.5°", "ゴルフ"],
+    ["シャフト TOUR SPEC フレックスS", "ゴルフ"],
     ["ファミコンミニ", "ゲーム"],
     ["メガドライブ", "ゲーム"],
     ["ゲームボーイアドバンス", "ゲーム"],
@@ -279,5 +301,9 @@ describe("getCategoryFromProductName", () => {
 
   it.each(cases)("「%s」→ %s", (input, expected) => {
     expect(getCategoryFromProductName(input)).toBe(expected);
+  });
+
+  it("仕入先情報にゴルフパートナーがある場合はゴルフにする", () => {
+    expect(getCategoryFromProductName("M6 10.5°", "Yahoo!ショッピング", "ゴルフパートナー", "")).toBe("ゴルフ");
   });
 });

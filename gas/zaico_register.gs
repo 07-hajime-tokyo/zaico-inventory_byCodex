@@ -101,8 +101,12 @@ const COL_SUPPLIER_DETAIL  = 14;  // N列: 仕入先詳細名
 // ============================================================
 // 商品名からカテゴリーを自動判別するマッピング
 // ============================================================
-function getCategoryFromProductName(productName) {
-  if (!productName) return "";
+function getCategoryFromProductName(productName, supplierName, supplierDetail, supplierUrl) {
+  const targetText = [productName, supplierName, supplierDetail, supplierUrl].filter(Boolean).join(" ");
+  if (!targetText) return "";
+  if (/(ゴルフ|golf|ゴルフパートナー|テーラーメイド|taylormade|キャロウェイ|callaway|タイトリスト|titleist|ピン(?!ク)|ping|ミズノ|mizuno|ダンロップ|dunlop|スリクソン|srixon|ゼクシオ|xxio|ブリヂストン|bridgestone|コブラ|cobra|クリーブランド|cleveland|ホンマ|honma|ツアーステージ|tourstage|オノフ|onoff|プロギア|prgr|マルマン|maruman|シャフト|ドライバー|アイアン|ウェッジ|パター|ユーティリティ|フェアウェイ|クラブ|ヘッド|ロフト|フレックス|tour\s*spec|speeder|スピーダー|diamana|ディアマナ|modus|モーダス|ns\s*pro|ventus|ベンタス|tensei|テンセイ)/i.test(targetText)) return "ゴルフ";
+  if (/\b(sim|stealth|qi10|m[1-6])\b.*(\d{1,2}(?:\.\d)?\s*[°度]|driver|shaft|fw|ut)/i.test(targetText)) return "ゴルフ";
+  if (/(\d{1,2}(?:\.\d)?\s*[°度]).*(シャフト|ドライバー|ヘッド|テーラーメイド|キャロウェイ|タイトリスト|ピン)/i.test(targetText)) return "ゴルフ";
   if (/switch\s*lite|スイッチ\s*ライト|switchlite/i.test(productName)) return "スイッチライト";
   if (/switch|スイッチ/i.test(productName)) return "スイッチ";
   if (/vita\s*2000|vita2000|pch-2/i.test(productName)) return "Vita2000";
@@ -275,7 +279,7 @@ function handleZaicoRegistration(sheet, checkboxRange, row) {
   const etcText = etcLines.join(", ");
 
   // 商品名からカテゴリーを自動判別
-  const autoCategory = getCategoryFromProductName(productName);
+  const autoCategory = getCategoryFromProductName(productName, supplierName, supplierDetail, supplierUrl);
 
   // 確認ダイアログを表示
   const ui = SpreadsheetApp.getUi();

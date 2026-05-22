@@ -16,8 +16,13 @@ import { eq, desc } from "drizzle-orm";
  * @param productName - 商品名
  * @returns カテゴリー名（判別できない場合は "ゲーム"）
  */
-export function getCategoryFromProductName(productName: string): string {
-  if (!productName) return "ゲーム";
+export function getCategoryFromProductName(productName: string, ...context: Array<string | null | undefined>): string {
+  const targetText = [productName, ...context].filter(Boolean).join(" ");
+  if (!targetText) return "ゲーム";
+
+  if (/(ゴルフ|golf|ゴルフパートナー|テーラーメイド|taylormade|キャロウェイ|callaway|タイトリスト|titleist|ピン(?!ク)|ping|ミズノ|mizuno|ダンロップ|dunlop|スリクソン|srixon|ゼクシオ|xxio|ブリヂストン|bridgestone|コブラ|cobra|クリーブランド|cleveland|ホンマ|honma|ツアーステージ|tourstage|オノフ|onoff|プロギア|prgr|マルマン|maruman|シャフト|ドライバー|アイアン|ウェッジ|パター|ユーティリティ|フェアウェイ|クラブ|ヘッド|ロフト|フレックス|tour\s*spec|speeder|スピーダー|diamana|ディアマナ|modus|モーダス|ns\s*pro|ventus|ベンタス|tensei|テンセイ)/i.test(targetText)) return "ゴルフ";
+  if (/\b(sim|stealth|qi10|m[1-6])\b.*(\d{1,2}(?:\.\d)?\s*[°度]|driver|shaft|fw|ut)/i.test(targetText)) return "ゴルフ";
+  if (/(\d{1,2}(?:\.\d)?\s*[°度]).*(シャフト|ドライバー|ヘッド|テーラーメイド|キャロウェイ|タイトリスト|ピン)/i.test(targetText)) return "ゴルフ";
 
   // Switch Lite（スイッチライト）→ スイッチライト
   if (/switch\s*lite|スイッチ\s*ライト|switchlite/i.test(productName)) return "スイッチライト";
@@ -79,6 +84,13 @@ interface GasWebhookPayload {
   rowIndex?: number;         // スプレッドシートの行番号（デバッグ用）
 }
 
+function resolveWebhookCategory(body: GasWebhookPayload, productName: string): string {
+  const incomingCategory = body.category?.trim();
+  const detectedCategory = getCategoryFromProductName(productName, body.supplier, body.supplierDetail, body.supplierUrl);
+  if (!incomingCategory || incomingCategory === "ゲーム") return detectedCategory;
+  return incomingCategory;
+}
+
 function resolveSupplierName(supplier?: string | null, supplierDetail?: string | null): string | null {
   const base = supplier?.trim() ?? "";
   const detail = supplierDetail?.trim() ?? "";
@@ -132,6 +144,7 @@ export function registerWebhookRoutes(app: Express): void {
       // supplier・仕入先URLは登録種別に関わらず共通で使用
       // G列/URL由来の仕入先名 + N列の店舗・出品者名を表示名にする
       const resolvedSupplierName = resolveSupplierName(body.supplier, body.supplierDetail);
+      const resolvedCategory = resolveWebhookCategory(body, productName);
       // https://が抜けている場合に補完
       const normalizedSupplierUrl = body.supplierUrl
         ? (body.supplierUrl.startsWith('http') ? body.supplierUrl : `https://${body.supplierUrl}`)
@@ -142,8 +155,6 @@ export function registerWebhookRoutes(app: Express): void {
       if (registerType === "inventory" || registerType === "both") {
         // etcフィールド: GASから渡されたetcTextを優先、なければsrnNumberのみ
         const etcValue = body.etcText?.trim() || (srnNumber || undefined);
-        // カテゴリー: GASから渡された場合はそれを優先、未指定の場合は商品名から自動判別
-        const resolvedCategory = body.category?.trim() || getCategoryFromProductName(productName);
 
         if (!zaicoEnabled) {
           // Zaico連携OFF: local_inventoriesに直接登録
@@ -238,7 +249,7 @@ export function registerWebhookRoutes(app: Express): void {
           itemsJson,
           localInventoryId,
           title: productName,
-          category: body.category?.trim() || getCategoryFromProductName(productName),
+          category: resolvedCategory,
           quantity: orderQuantity,
           unitPrice: purchasePrice != null ? String(purchasePrice) : undefined,
           managementNo: srnNumber || null,
