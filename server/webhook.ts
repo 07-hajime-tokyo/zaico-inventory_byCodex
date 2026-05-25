@@ -101,6 +101,11 @@ function resolveSupplierName(supplier?: string | null, supplierDetail?: string |
   return base || detail || null;
 }
 
+function isValidGasWebhookSecret(secret: unknown): boolean {
+  const expectedSecret = ENV.gasWebhookSecret.trim();
+  return typeof secret === "string" && secret.trim() === expectedSecret;
+}
+
 export function registerWebhookRoutes(app: Express): void {
   /**
    * POST /api/gas-webhook/register-product
@@ -111,12 +116,12 @@ export function registerWebhookRoutes(app: Express): void {
       const body = req.body as GasWebhookPayload;
 
       // 1. シークレットキー認証
-      const expectedSecret = ENV.gasWebhookSecret;
+      const expectedSecret = ENV.gasWebhookSecret.trim();
       if (!expectedSecret) {
         console.error("[GAS Webhook] GAS_WEBHOOK_SECRET が未設定です");
         return res.status(500).json({ success: false, error: "サーバー設定エラー: シークレットキーが未設定です" });
       }
-      if (!body.secret || body.secret !== expectedSecret) {
+      if (!isValidGasWebhookSecret(body.secret)) {
         console.warn("[GAS Webhook] 認証失敗: 無効なシークレットキー");
         return res.status(401).json({ success: false, error: "認証エラー: シークレットキーが一致しません" });
       }
@@ -296,7 +301,7 @@ export function registerWebhookRoutes(app: Express): void {
       };
 
       // シークレット検証
-      if (!body.secret || body.secret !== process.env.GAS_WEBHOOK_SECRET) {
+      if (!isValidGasWebhookSecret(body.secret)) {
         return res.status(401).json({ success: false, error: "認証エラー" });
       }
 
