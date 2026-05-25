@@ -1515,6 +1515,94 @@ export const appRouter = router({
       }),
 
     /**
+     * カテゴリのみ更新（入庫管理画面などから呼び出す軽量プロシージャ）
+     */
+    updateCategoryOnly: publicProcedure
+      .input(
+        z.object({
+          inventoryId: z.number().int().positive(),
+          category: z.string().max(250).nullable(),
+          operatorKey: z.enum(["default", "A", "B"]).optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const zaicoEnabled = await isZaicoEnabled();
+        const operatorToken = resolveOperatorToken(input.operatorKey);
+        const nextCategory = normalizeCategoryName(input.category);
+        const localCategory = nextCategory || null;
+
+        if (!zaicoEnabled) {
+          const localInv = await getLocalInventoryByZaicoIdOrId(input.inventoryId);
+          if (localInv) {
+            await updateLocalInventory(localInv.id, { category: localCategory });
+          }
+
+          const db = await getDb();
+          if (db) {
+            const { localPurchases: lpTbl } = await import("../drizzle/schema");
+            const purchaseRows = await getLocalPurchases();
+            const inventoryIds = new Set(
+              [input.inventoryId, localInv?.id, localInv?.zaicoId]
+                .filter((id): id is number => typeof id === "number")
+                .map((id) => Number(id))
+            );
+            const targets = purchaseRows.filter((purchase) => {
+              if (localInv?.id && purchase.localInventoryId === localInv.id) return true;
+              try {
+                const items = JSON.parse(purchase.itemsJson ?? "[]");
+                return Array.isArray(items) && items.some((item) => inventoryIds.has(Number(item.inventory_id ?? item.inventoryId)));
+              } catch {
+                return false;
+              }
+            });
+
+            await Promise.all(
+              targets.map(async (purchase) => {
+                const updateData: Partial<typeof lpTbl.$inferInsert> = { category: localCategory };
+                try {
+                  const items = JSON.parse(purchase.itemsJson ?? "[]");
+                  if (Array.isArray(items)) {
+                    let changed = false;
+                    const nextItems = items.map((item) => {
+                      if (!item || typeof item !== "object") return item;
+                      const row = item as Record<string, unknown>;
+                      const itemInventoryId = Number(row.inventory_id ?? row.inventoryId);
+                      const matchesItem = inventoryIds.has(itemInventoryId);
+                      const matchesSingleLocalPurchase = Boolean(localInv?.id && purchase.localInventoryId === localInv.id && items.length === 1);
+                      if (!matchesItem && !matchesSingleLocalPurchase) return item;
+                      changed = true;
+                      return { ...row, category: localCategory };
+                    });
+                    if (changed) updateData.itemsJson = JSON.stringify(nextItems);
+                  }
+                } catch {
+                  // Snapshot updates are best-effort; the row category remains authoritative.
+                }
+                await db.update(lpTbl).set(updateData).where(eq(lpTbl.id, purchase.id));
+              })
+            );
+          }
+          return { success: true };
+        }
+
+        const inv = await getInventory(input.inventoryId);
+        await updateInventory(
+          input.inventoryId,
+          {
+            title: inv.title,
+            quantity: String(inv.quantity ?? 0),
+            unit: inv.unit ?? undefined,
+            category: nextCategory,
+            place: inv.place ?? undefined,
+            etc: inv.etc ?? undefined,
+            purchase_unit_price: inv.purchase_unit_price ?? undefined,
+          },
+          operatorToken
+        );
+        return { success: true };
+      }),
+
+    /**
      * 発注済み（ordered）ステータスで入庫データを新規作成
      * POST /api/v1/purchases/
      */
