@@ -430,8 +430,12 @@ function PurchaseCardMobile({
 
 export default function Purchases() {
   const utils = trpc.useUtils();
-  const { data: purchases, isLoading, refetch } = trpc.zaico.getPurchasesWithCategory.useQuery();
-  const { data: inventories } = trpc.zaico.getInventories.useQuery();
+  const externalDataQueryOptions = {
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
+  } as const;
+  const { data: purchases, isLoading, refetch } = trpc.zaico.getPurchasesWithCategory.useQuery(undefined, externalDataQueryOptions);
+  const { data: inventories } = trpc.zaico.getInventories.useQuery(undefined, externalDataQueryOptions);
   const completeMutation = trpc.zaico.completePurchase.useMutation();
   const upsertExtraMutation = trpc.purchaseExtra.upsert.useMutation();
   const upsertExtraBulkMutation = trpc.purchaseExtra.upsertBulk.useMutation();

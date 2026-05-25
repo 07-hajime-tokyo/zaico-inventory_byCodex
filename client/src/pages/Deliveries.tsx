@@ -184,7 +184,11 @@ const emptyForm: InventoryFormData = {
 
 export default function Deliveries() {
   const utils = trpc.useUtils();
-  const { data: inventories, isLoading, refetch } = trpc.zaico.getInventories.useQuery();
+  const externalDataQueryOptions = {
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
+  } as const;
+  const { data: inventories, isLoading, refetch } = trpc.zaico.getInventories.useQuery(undefined, externalDataQueryOptions);
   const createDeliveryMutation = trpc.zaico.createDelivery.useMutation();
   const deleteInventoryMutation = trpc.zaico.deleteInventory.useMutation();
   const updateInventoryMutation = trpc.zaico.updateInventory.useMutation();
