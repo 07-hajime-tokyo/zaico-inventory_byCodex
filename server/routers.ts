@@ -2962,8 +2962,8 @@ export const appRouter = router({
           g.deliveredCount += item.quantity;
           const etc = inventoryEtcMap.get(item.inventoryId) ?? "";
           const rawMgmt = etc.split(",")[0]?.trim() ?? "";
-          // 管理番号として有効な形式: 「在庫」始まり、または3、4桁の数字始まり（例: 371_ルカ_1/5、在庫0408_1）
-          const isValidMgmt = /^在庫/.test(rawMgmt) || /^\d{3,4}[^\d]/.test(rawMgmt) || /^\d{3,4}$/.test(rawMgmt);
+          // 管理番号として有効な形式: 「在庫」/「ebay」始まり、または3、4桁の数字始まり
+          const isValidMgmt = /^在庫/.test(rawMgmt) || /^ebay/i.test(rawMgmt) || /^\d{3,4}[^\d]/.test(rawMgmt) || /^\d{3,4}$/.test(rawMgmt);
           const managementNo = isValidMgmt ? rawMgmt : "";
           const pInfo3 = purchaseInfoMap.get(item.inventoryId) ?? { unitPrice: "", trackingNumber: "", supplierUrl: "", supplierName: "" };
           g.deliveryItems.push({

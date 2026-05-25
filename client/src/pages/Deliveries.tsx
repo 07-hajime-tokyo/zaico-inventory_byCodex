@@ -145,13 +145,13 @@ function formatPrice(price: number | undefined | null): string {
   return `¥${price.toLocaleString()}`;
 }
 
-/** etc フィールドから管理番号を取得する（数字始まり・在庫始まりのみ表示） */
+/** etc フィールドから管理番号を取得する（数字・在庫・ebay始まりのみ表示） */
 function getManagementNo(etc: string | undefined): string {
   if (!etc) return "";
   // カンマ区切りまたはスペース区切りの先頭部分を管理番号として取得
   const firstPart = etc.split(",")[0].trim();
   const raw = firstPart.split(" ")[0].trim();
-  if (/^\d/.test(raw) || /^在庫/.test(raw)) return raw;
+  if (/^\d/.test(raw) || /^在庫/.test(raw) || /^ebay/i.test(raw)) return raw;
   return "";
 }
 
